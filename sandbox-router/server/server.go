@@ -165,9 +165,6 @@ func (s *Server) Run(ctx context.Context) error {
 		ln, err := net.Listen("tcp", l.srv.Addr)
 		if err != nil {
 			for _, b := range bound {
-				if b.tls {
-					continue
-				}
 				_ = b.ln.Close()
 			}
 			return fmt.Errorf("listen %s on %s: %w", l.name, l.srv.Addr, err)
@@ -190,7 +187,7 @@ func (s *Server) Run(ctx context.Context) error {
 				err = l.srv.Serve(l.ln)
 			}
 			if errors.Is(err, http.ErrServerClosed) {
-				return err
+				return nil
 			}
 			return fmt.Errorf("%s server: %w", l.name, err)
 		})
@@ -206,7 +203,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Drain phase — run Shutdown concurrently across listeners so one slow
 	// drain can't eat the whole shutdownTimeout budget.
-	shutCtx, cancel := context.WithTimeout(gctx, s.shutdownTimeout)
+	shutCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
 	var (
 		shutWg  sync.WaitGroup
