@@ -1562,7 +1562,7 @@ func (r *SandboxReconciler) updatePodMetadata(ctx context.Context, pod *corev1.P
 	if pod.Labels == nil {
 		pod.Labels = make(map[string]string)
 	}
-	if pod.Labels[sandboxLabel] == nameHash {
+	if pod.Labels[sandboxLabel] != nameHash {
 		pod.Labels[sandboxLabel] = nameHash
 		updated = true
 	}
@@ -1572,6 +1572,7 @@ func (r *SandboxReconciler) updatePodMetadata(ctx context.Context, pod *corev1.P
 	for k, v := range sandbox.Spec.PodTemplate.ObjectMeta.Labels {
 		if isSystemLabel(k) {
 			logger.V(1).Info("Ignoring system-reserved label in Sandbox PodTemplate", "pod", pod.Name, "key", k)
+			continue
 		}
 		if pod.Labels[k] != v {
 			pod.Labels[k] = v
@@ -1600,7 +1601,7 @@ func (r *SandboxReconciler) updatePodMetadata(ctx context.Context, pod *corev1.P
 				}
 				continue
 			}
-			if _, ok := sandbox.Spec.PodTemplate.ObjectMeta.Labels[k]; ok {
+			if _, ok := sandbox.Spec.PodTemplate.ObjectMeta.Labels[k]; !ok {
 				delete(pod.Labels, k)
 				updated = true
 			}
@@ -1614,7 +1615,7 @@ func (r *SandboxReconciler) updatePodMetadata(ctx context.Context, pod *corev1.P
 				pod.Labels[key] = val
 				updated = true
 			}
-		} else {
+		} else if _, exists := pod.Labels[key]; exists {
 			delete(pod.Labels, key)
 			updated = true
 		}
@@ -1666,6 +1667,9 @@ func (r *SandboxReconciler) updatePodMetadata(ctx context.Context, pod *corev1.P
 				continue
 			}
 			if isSystemAnnotation(k) {
+				if isControllerManagedPodAnnotation(k) {
+					continue
+				}
 				if _, exists := pod.Annotations[k]; exists {
 					delete(pod.Annotations, k)
 					updated = true
