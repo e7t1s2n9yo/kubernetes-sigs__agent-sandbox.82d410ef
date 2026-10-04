@@ -935,13 +935,17 @@ func (r *SandboxWarmPoolReconciler) filterActiveSandboxes(ctx context.Context, p
 			// Terminating pool members are no longer active, but they still
 			// occupy capacity until fully gone: count them so create gating
 			// cannot balloon the population while deletes lag (#1215).
-			terminatingReplicas++
+			if isControlledByPool {
+				terminatingReplicas++
+			}
 			continue
 		}
 
 		// A sandbox this controller already deleted may still show up in the
-		// (lagging) cache without a deletion timestamp; treat it as inactive.
+		// (lagging) cache without a deletion timestamp; treat it as
+		// terminating, not active.
 		if isControlledByPool && r.exp().IsPendingDeletion(poolKey, sb.UID) {
+			terminatingReplicas++
 			continue
 		}
 
@@ -950,7 +954,7 @@ func (r *SandboxWarmPoolReconciler) filterActiveSandboxes(ctx context.Context, p
 			continue
 		}
 
-		if tmplErr == nil && updateStrategy == extensionsv1beta1.RecreateSandboxWarmPoolUpdateStrategyType && isOrphan {
+		if tmplErr == nil && (updateStrategy == extensionsv1beta1.RecreateSandboxWarmPoolUpdateStrategyType || isOrphan) {
 			if r.isSandboxStale(ctx, &sb, template, currentSandboxBlueprintHash, vettedHashes) {
 				logger.Info("Deleting stale sandbox", "sandbox", sb.Name, "isOrphan", isOrphan)
 				// Only pool-owned sandboxes get deletion expectations: the
@@ -985,6 +989,7 @@ func (r *SandboxWarmPoolReconciler) filterActiveSandboxes(ctx context.Context, p
 			if err := r.adoptSandbox(ctx, warmPool, &sb); err != nil {
 				logger.Error(err, "Failed to adopt sandbox", "sandbox", sb.Name)
 				allErrors = errors.Join(allErrors, err)
+				continue
 			}
 		}
 
