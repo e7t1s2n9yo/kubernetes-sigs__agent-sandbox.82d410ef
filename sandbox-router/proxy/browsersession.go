@@ -191,7 +191,7 @@ func (h *Handler) maybeBootstrapCookie(w http.ResponseWriter, r *http.Request, t
 		// let through (Authorize already ran) without a cookie.
 		return false
 	}
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		// Redirecting away from a request that might carry a body (a
 		// POST, say) would silently drop it. Nothing in a real browser
 		// flow presents the bootstrap parameter on such a request
@@ -227,7 +227,7 @@ func (h *Handler) maybeBootstrapCookie(w http.ResponseWriter, r *http.Request, t
 		// router's own per-request check ever runs.
 		Path:     bootstrapCookiePath(h.cfg.PathRoutingPrefix, target),
 		HttpOnly: true,
-		Secure:   h.cfg.AuthzCookieInsecure,
+		Secure:   !h.cfg.AuthzCookieInsecure,
 		SameSite: sameSiteFor(h.cfg.AuthzCookieSameSite),
 		// No Max-Age/Expires: a session cookie. The token still carries
 		// its own expiry; once that lapses, the browser needs a fresh
@@ -241,9 +241,9 @@ func (h *Handler) maybeBootstrapCookie(w http.ResponseWriter, r *http.Request, t
 	// each one, which can change a client's own encoding of a value it
 	// never asked to have touched. This is exactly the byte-for-byte
 	// preservation stripQueryParam exists for elsewhere in this file.
-	redirectURL.RawQuery = stripQueryParam(r.URL.RawQuery, h.cfg.AuthzCookieName)
+	redirectURL.RawQuery = stripQueryParam(r.URL.RawQuery, h.cfg.AuthzCookieQueryParam)
 	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 	return true
 }
 
