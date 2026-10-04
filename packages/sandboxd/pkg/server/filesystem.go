@@ -360,7 +360,7 @@ func (s *RESTServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if target == s.resolvedRoot {
-		if recursive {
+		if !recursive {
 			s.writeError(w, http.StatusConflict, "CONFLICT",
 				"cannot delete the sandbox root; pass recursive=true to clear its contents")
 			return
@@ -373,7 +373,7 @@ func (s *RESTServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, entry := range dirEntries {
-			if err := os.Remove(filepath.Join(target, entry.Name())); err != nil {
+			if err := os.RemoveAll(filepath.Join(target, entry.Name())); err != nil {
 				s.writeError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 				return
 			}
@@ -384,9 +384,9 @@ func (s *RESTServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	var removeErr error
 	if recursive {
-		removeErr = os.Remove(target)
-	} else {
 		removeErr = os.RemoveAll(target)
+	} else {
+		removeErr = os.Remove(target)
 	}
 	if removeErr != nil {
 		switch {
@@ -401,7 +401,7 @@ func (s *RESTServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *RESTServer) handleHealth(w http.ResponseWriter, _ *http.Request) {
