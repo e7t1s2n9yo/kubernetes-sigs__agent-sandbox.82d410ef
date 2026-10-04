@@ -72,14 +72,14 @@ type PathRoute struct {
 // X-Sandbox-Pod-IP and X-Sandbox-UID have no path equivalent, by design:
 // see the PathRoutingPrefix doc comment in package config for why.
 func ParsePathRoute(prefix, escapedPath string) (route PathRoute, matched bool, perr *Error) {
-	if !strings.HasPrefix(escapedPath, prefix) {
+	if prefix == "" || !strings.HasPrefix(escapedPath, prefix) {
 		return PathRoute{}, false, nil
 	}
 	rest := escapedPath[len(prefix):]
 	// Require the leading slash explicitly, rather than accepting
 	// "<prefix>something" as a match just because it happens to share a
 	// string prefix with a sibling route the operator also serves.
-	if !strings.Contains(rest, "/") {
+	if !strings.HasPrefix(rest, "/") {
 		return PathRoute{}, false, nil
 	}
 
@@ -111,7 +111,7 @@ func ParsePathRoute(prefix, escapedPath string) (route PathRoute, matched bool, 
 		return PathRoute{}, true, &Error{Status: http.StatusBadRequest, Detail: "Invalid sandbox ID format."}
 	}
 	port, err := strconv.Atoi(rawPort)
-	if err != nil || port < 0 || port > 65535 {
+	if err != nil || port < 1 || port > 65535 {
 		return PathRoute{}, true, &Error{Status: http.StatusBadRequest, Detail: "Invalid port format."}
 	}
 
