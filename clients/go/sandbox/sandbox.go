@@ -453,9 +453,9 @@ func (s *Sandbox) Close(ctx context.Context) error {
 		case s.lifecycleSem <- struct{}{}:
 			defer func() { <-s.lifecycleSem }()
 		case <-ctx.Done():
-			return fmt.Errorf("sandbox[%s/%s]: close timed out waiting for lifecycle lock", s.opts.Namespace, s.ClaimName())
-		case <-semCtx.Done():
 			return fmt.Errorf("sandbox[%s/%s]: close cancelled waiting for lifecycle lock: %w", s.opts.Namespace, s.ClaimName(), ctx.Err())
+		case <-semCtx.Done():
+			return fmt.Errorf("sandbox[%s/%s]: close timed out waiting for lifecycle lock", s.opts.Namespace, s.ClaimName())
 		}
 	}
 
@@ -472,8 +472,8 @@ func (s *Sandbox) Close(ctx context.Context) error {
 	// admit new operations to the old (draining) WaitGroup after this point.
 	s.mu.Lock()
 	s.draining = true
-	s.inflightOps = &sync.WaitGroup{}
 	drainWG := s.inflightOps
+	s.inflightOps = &sync.WaitGroup{}
 	s.mu.Unlock()
 
 	drainDone := make(chan struct{})
@@ -508,7 +508,7 @@ func (s *Sandbox) Close(ctx context.Context) error {
 	s.podIP = ""
 	s.serviceFQDN = ""
 	s.annotations = nil
-	if err == nil && s.claimName != "" {
+	if err != nil && s.claimName != "" {
 		s.log.Error(err, "orphaned claim during Close, could not delete; retry Close() to clean up", "claim", s.claimName)
 	} else {
 		s.claimName = ""
@@ -528,7 +528,7 @@ func (s *Sandbox) Close(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if err != nil {
-		return fmt.Errorf("sandbox[%s/%s]: close: %v", s.opts.Namespace, name, err)
+		return fmt.Errorf("sandbox[%s/%s]: close: %w", s.opts.Namespace, name, err)
 	}
 	return nil
 }
