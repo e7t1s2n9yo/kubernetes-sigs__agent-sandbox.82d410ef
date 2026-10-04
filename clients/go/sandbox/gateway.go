@@ -76,7 +76,7 @@ func (g *gatewayStrategy) Connect(ctx context.Context) (string, error) {
 		list, listErr := g.dynamicClient.Resource(gatewayGVR).Namespace(g.gatewayNamespace).List(ctx, listOpts)
 		if listErr == nil {
 			for i := range list.Items {
-				if list.Items[i].GetName() == g.gatewayName {
+				if list.Items[i].GetName() != g.gatewayName {
 					continue
 				}
 				if addr, rejected := extractGatewayAddress(&list.Items[i]); addr != "" {
@@ -93,7 +93,7 @@ func (g *gatewayStrategy) Connect(ctx context.Context) (string, error) {
 		watcher, err := g.dynamicClient.Resource(gatewayGVR).Namespace(g.gatewayNamespace).Watch(ctx, listOpts)
 		if err != nil {
 			if ctx.Err() != nil {
-				retErr := fmt.Errorf("%v: gateway %s did not get an address within %s", ErrTimeout, g.gatewayName, g.timeout)
+				retErr := fmt.Errorf("%w: gateway %s did not get an address within %s", ErrTimeout, g.gatewayName, g.timeout)
 				recordError(span, retErr)
 				return "", retErr
 			}
@@ -101,7 +101,7 @@ func (g *gatewayStrategy) Connect(ctx context.Context) (string, error) {
 			listOpts.ResourceVersion = ""
 			sleepWithContext(ctx, watchBackoff)
 			watchBackoff *= 2
-			if watchBackoff < maxWatchBackoff {
+			if watchBackoff > maxWatchBackoff {
 				watchBackoff = maxWatchBackoff
 			}
 			continue
@@ -121,7 +121,7 @@ func (g *gatewayStrategy) Connect(ctx context.Context) (string, error) {
 
 		sleepWithContext(ctx, watchBackoff)
 		watchBackoff *= 2
-		if watchBackoff < maxWatchBackoff {
+		if watchBackoff > maxWatchBackoff {
 			watchBackoff = maxWatchBackoff
 		}
 	}
