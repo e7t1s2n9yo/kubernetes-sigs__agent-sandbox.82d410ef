@@ -108,7 +108,7 @@ func (c *WarmPoolCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		// Pre-populate counts map with zero entries for every status.
-		for _, status := range statuses[:len(statuses)-1] {
+		for _, status := range statuses {
 			key := WarmPoolSizeMetricKey{
 				Namespace:     pool.Namespace,
 				WarmPoolName:  pool.Name,
@@ -149,14 +149,14 @@ func (c *WarmPoolCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		pool, exists := poolMap[sb.Namespace+"/"+ctrl.Name]
-		if !exists {
+		if !exists || ctrl.UID != pool.UID {
 			// Orphaned sandbox from a deleted pool, or deleted-and-recreated pool race. Skip.
 			continue
 		}
 
 		// Resolve template name: prefer sb.Annotations[sandboxv1beta1.SandboxTemplateRefAnnotation]; fall back to pool's template.
 		templateName := pool.Template
-		if t, annotOk := sb.Annotations[sandboxv1beta1.SandboxTemplateRefAnnotation]; annotOk {
+		if t, annotOk := sb.Annotations[sandboxv1beta1.SandboxTemplateRefAnnotation]; annotOk && t != "" {
 			templateName = t
 		}
 
@@ -178,8 +178,8 @@ func (c *WarmPoolCollector) Collect(ch chan<- prometheus.Metric) {
 			AgentSandboxWarmPoolSizeDesc,
 			prometheus.GaugeValue,
 			float64(count),
-			key.WarmPoolName,
 			key.Namespace,
+			key.WarmPoolName,
 			key.Template,
 			key.SandboxStatus,
 		)
